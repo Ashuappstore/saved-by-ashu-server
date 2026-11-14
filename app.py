@@ -43,19 +43,9 @@ def download(
     fid = str(uuid.uuid4())
     is_audio = (res == "audio" or ext == "mp3")
 
-    base_cmd = [
-        "yt-dlp",
-        "--no-playlist",
-        "--extractor-args",
-        "youtube:player_client=mweb,web",
-    ]
-
-    if os.path.exists(COOKIE_PATH):
-        base_cmd.extend(["--cookies", COOKIE_PATH])
-
     if is_audio:
         out = f"/tmp/{fid}.%(ext)s"
-        cmd = base_cmd + [
+        format_args = [
             "-f",
             "bestaudio/best",
             "-x",
@@ -79,7 +69,7 @@ def download(
             f"best[height<={height}]/best"
         )
         out = f"/tmp/{fid}.%(ext)s"
-        cmd = base_cmd + [
+        format_args = [
             "-f",
             fmt,
             "--merge-output-format",
@@ -92,12 +82,25 @@ def download(
         media_type = "video/mp4"
         filename = f"Saved_by_Ashu_{height}p.mp4"
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise HTTPException(status_code=500, detail=result.stderr[-350:])
+    # पहले tv और android_vr क्लाइंट से बिना PO Token के डाउनलोड करें
+    strategies = [
+        ["yt-dlp", "--no-playlist", "--extractor-args", "youtube:player_client=tv,android_vr"] + format_args,
+        ["yt-dlp", "--no-playlist", "--extractor-args", "youtube:player_client=ios,android"] + format_args,
+    ]
+    if os.path.exists(COOKIE_PATH):
+        strategies.append(["yt-dlp", "--no-playlist", "--cookies", COOKIE_PATH] + format_args)
 
-    if not os.path.exists(final_file):
-        raise HTTPException(status_code=500, detail="File processing failed")
+    last_err = ""
+    success = False
+    for cmd in strategies:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0 and os.path.exists(final_file):
+            success = True
+            break
+        last_err = result.stderr[-350:]
+
+    if not success:
+        raise HTTPException(status_code=500, detail=last_err or "Download failed")
 
     background_tasks.add_task(cleanup, final_file)
     return FileResponse(final_file, media_type=media_type, filename=filename)
