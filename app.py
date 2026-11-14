@@ -43,10 +43,21 @@ def download(
     fid = str(uuid.uuid4())
     is_audio = (res == "audio" or ext == "mp3")
 
+    base_cmd = [
+        "yt-dlp",
+        "--no-playlist",
+        "--extractor-args",
+        "youtube:player_client=mweb,web",
+    ]
+
+    if os.path.exists(COOKIE_PATH):
+        base_cmd.extend(["--cookies", COOKIE_PATH])
+
     if is_audio:
         out = f"/tmp/{fid}.%(ext)s"
-        cmd = [
-            "yt-dlp",
+        cmd = base_cmd + [
+            "-f",
+            "bestaudio/best",
             "-x",
             "--audio-format",
             "mp3",
@@ -61,10 +72,14 @@ def download(
         filename = "Saved_by_Ashu.mp3"
     else:
         height = res if res.isdigit() else "720"
-        fmt = f"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]/best[height<={height}][ext=mp4]/best[height<={height}]/best"
+        fmt = (
+            f"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]/"
+            f"bestvideo[height<={height}]+bestaudio/"
+            f"best[height<={height}][ext=mp4]/"
+            f"best[height<={height}]/best"
+        )
         out = f"/tmp/{fid}.%(ext)s"
-        cmd = [
-            "yt-dlp",
+        cmd = base_cmd + [
             "-f",
             fmt,
             "--merge-output-format",
@@ -77,12 +92,9 @@ def download(
         media_type = "video/mp4"
         filename = f"Saved_by_Ashu_{height}p.mp4"
 
-    if os.path.exists(COOKIE_PATH):
-        cmd.extend(["--cookies", COOKIE_PATH])
-
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise HTTPException(status_code=500, detail=result.stderr[-300:])
+        raise HTTPException(status_code=500, detail=result.stderr[-350:])
 
     if not os.path.exists(final_file):
         raise HTTPException(status_code=500, detail="File processing failed")
